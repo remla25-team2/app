@@ -29,13 +29,19 @@ jobs:
             echo "version_minor=$MINOR" >> $GITHUB_ENV
             echo "version_patch=$PATCH" >> $GITHUB_ENV
         
-        - run: |
-            IMG="ghcr.io/${{github.repository}}"
+        - name: Build and push multi-arch image
+          run: |
+            IMG="ghcr.io/${{ github.repository }}"
             IMG=${IMG@L}
-            docker build \
-                --tag $IMG:${{ env.version }} \
-                --tag $IMG:${{ env.version_major }}.${{ env.version_minor }}.latest \
-                --tag $IMG:${{ env.version_major }}.latest \
-                --tag $IMG:latest \
-                .
-            docker push --all-tags $IMG
+            
+            docker buildx create --use --name multiarch-builder
+            docker buildx inspect --bootstrap
+
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              --tag $IMG:${{ env.version }} \
+              --tag $IMG:${{ env.version_major }}.${{ env.version_minor }}.latest \
+              --tag $IMG:${{ env.version_major }}.latest \
+              --tag $IMG:latest \
+              --push \
+              .
