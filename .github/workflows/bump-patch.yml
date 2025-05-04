@@ -1,0 +1,43 @@
+name: Bump Patch Version
+
+on: push
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      - name: Get latest version tag
+        id: get_tag
+        run: |
+          latest_tag=$(git tag --sort=-creatordate | grep '^v[0-9]\+\.[0-9]\+\.[0-9]\+$' | head -n 1)
+          echo "Latest tag: $latest_tag"
+          echo "tag=$latest_tag" >> $GITHUB_OUTPUT
+
+      - name: Bump patch version
+        id: bump
+        run: |
+          tag=${{ steps.get_tag.outputs.tag }}
+          if [ -z "$tag" ]; then
+            echo "No existing tags found, using v0.0.1"
+            echo "new_tag=v0.0.1" >> $GITHUB_OUTPUT
+          else
+            IFS='.' read -r major minor patch <<< "${tag#v}"
+            patch=$((patch + 1))
+            new_tag="v$major.$minor.$patch"
+            echo "Bumped to $new_tag"
+            echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create new tag and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag ${{ steps.bump.outputs.new_tag }}
+          git push origin ${{ steps.bump.outputs.new_tag }}
