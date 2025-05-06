@@ -60,7 +60,6 @@ jobs:
           git config user.email "github-actions@github.com"
           git tag ${{ steps.bump.outputs.new_tag }}
           git push origin ${{ steps.bump.outputs.new_tag }}
-            .
       
       - name: Parse version info from tag
         run: |
