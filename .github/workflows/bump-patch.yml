@@ -1,6 +1,11 @@
 name: Bump Patch Version
 
-on: push
+on: 
+  push:
+    tags-ignore:
+      - '**'
+    branches:
+      - '**'
 
 jobs:
   bump:
@@ -41,3 +46,32 @@ jobs:
           git config user.email "github-actions@github.com"
           git tag ${{ steps.bump.outputs.new_tag }}
           git push origin ${{ steps.bump.outputs.new_tag }}
+
+      - name: Parse version info from tag
+        run: |
+          # GITHUB_REF is like refs/tags/v2.3.5, so strip the first 11 chars
+          VERSION=${GITHUB_REF:11}
+          MAJOR=$(echo "$VERSION" | cut -d . -f 1)
+          MINOR=$(echo "$VERSION" | cut -d . -f 2)
+          PATCH=$(echo "$VERSION" | cut -d . -f 3)
+          echo "version=$VERSION" >> $GITHUB_ENV
+          echo "version_major=$MAJOR" >> $GITHUB_ENV
+          echo "version_minor=$MINOR" >> $GITHUB_ENV
+          echo "version_patch=$PATCH" >> $GITHUB_ENV
+        
+      - name: Build and push multi-arch image
+        run: |
+          IMG="ghcr.io/${{ github.repository }}"
+          IMG=${IMG@L}
+          
+          docker buildx create --use --name multiarch-builder
+          docker buildx inspect --bootstrap
+
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --tag $IMG:${{ env.version }} \
+            --tag $IMG:${{ env.version_major }}.${{ env.version_minor }}.latest \
+            --tag $IMG:${{ env.version_major }}.latest \
+            --tag $IMG:latest \
+            --push \
+            .
