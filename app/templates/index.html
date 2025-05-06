@@ -1,12 +1,35 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>REMLA. Group 2. App</title>
-    <script src="{{ url_for('static', filename='main.js') }}"></script>
+  <meta charset="UTF-8" />
+  <title>REMLA Group 2 • Stock Sentiment</title>
+  <script src="{{ url_for('static', filename='main.js') }}" defer></script>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 2em auto; }
+    label { display: block; margin-top: 1em; }
+    input { width: 100%; padding: 0.5em; box-sizing: border-box; }
+    button { margin-top: 1em; padding: 0.5em 1em; }
+    #sentimentResult { margin-top: 1em; font-size: 1.2em; }
+  </style>
 </head>
 <body>
-    <h1>REMLA. Group 2. App</h1>
-    <p id="app_version">Loading...</p>
-    <p id="model_version">Loading...</p>
+  <h1>Stock Sentiment Analyzer</h1>
+
+  <form id="sentimentForm">
+    <label for="ticker">Ticker:</label>
+    <input type="text" id="ticker" name="ticker" placeholder="e.g. AAPL" required />
+
+    <label for="text">Comment:</label>
+    <input type="text" id="text" name="text" placeholder="Your comment here" required />
+
+    <button type="submit">Analyze Sentiment</button>
+  </form>
+
+  <div id="sentimentResult">—</div>
+
+  <hr/>
+
+  <p>App version: <strong><span id="app_version">Loading…</span></strong></p>
+  <p>Model version: <strong><span id="model_version">Loading…</span></strong></p>
 </body>
 </html>
