@@ -88,3 +88,4 @@ jobs:
             --tag $IMG:${{ env.version_major }}.latest \
             --tag $IMG:latest \
             --push \
+            .
