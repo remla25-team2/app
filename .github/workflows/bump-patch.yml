@@ -61,10 +61,11 @@ jobs:
           git tag ${{ steps.bump.outputs.new_tag }}
           git push origin ${{ steps.bump.outputs.new_tag }}
       
-      - name: Parse version info from tag
+      - name: Parse version info from new tag
+        id: parse
         run: |
-          # GITHUB_REF is like refs/tags/v2.3.5, so strip the first 11 chars
-          VERSION=${GITHUB_REF:11}
+          TAG=${{ steps.bump.outputs.new_tag }}
+          VERSION=${TAG:1}
           MAJOR=$(echo "$VERSION" | cut -d . -f 1)
           MINOR=$(echo "$VERSION" | cut -d . -f 2)
           PATCH=$(echo "$VERSION" | cut -d . -f 3)
