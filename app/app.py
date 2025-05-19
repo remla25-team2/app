@@ -1,10 +1,42 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, Response, render_template, jsonify, request
 from lib_version.version_util import VersionUtil
 import requests
 import os
+from prometheus_client import Counter, Gauge, generate_latest
 
 app = Flask(__name__)
 MODEL_URL = os.environ.get('MODEL_SERVICE_URL', 'http://model-service:5001')
+
+http_reqs = Counter(
+    'http_requests_total',
+    'Total HTTP requests',
+    ['method','endpoint','status']
+)
+in_flight = Gauge(
+    'in_flight_requests',
+    'Number of in-flight requests'
+)
+
+@app.before_request
+def before_request():
+    in_flight.inc()
+
+@app.after_request
+def after_request(response):
+    # label by method, path, status code
+    http_reqs.labels(
+        method=request.method,
+        endpoint=request.path,
+        status=response.status_code
+    ).inc()
+    in_flight.dec()
+    return response
+
+@app.route('/metrics')
+def metrics():
+    return Response(generate_latest(), mimetype='text/plain')
+
+
 
 @app.route('/')
 def index():
@@ -28,6 +60,10 @@ def modelversion():
     resp = requests.get(f"{MODEL_URL}/version")
     data = resp.json()
     return jsonify(model_service_version=data.get('service_version'))
+
+@app.route('/check_health')
+def check_health():
+	return 'OK', 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))

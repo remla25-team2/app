@@ -1,3 +1,4 @@
 Flask==2.2.5
 requests
+prometheus-client
 git+https://github.com/remla25-team2/lib-version@v0.0.1#egg=lib-version
