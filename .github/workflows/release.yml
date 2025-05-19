@@ -113,7 +113,9 @@ jobs:
             docker buildx build \
               --platform linux/amd64,linux/arm64 \
               --builder ${{ steps.buildx.outputs.name }} \
-              --tag $IMG:${{ env.pre_version }} \
-              --tag $IMG:pre-release \
+              --tag $IMG:${{ env.version }} \
+              --tag $IMG:${{ env.version_major }}.${{ env.version_minor }}.latest \
+              --tag $IMG:${{ env.version_major }}.latest \
+              --tag $IMG:latest \
               --push \
               .
