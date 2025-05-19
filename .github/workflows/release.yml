@@ -68,18 +68,26 @@ jobs:
             echo "version=$VERSION"
             echo "version_major=$MAJOR"
             echo "version_minor=$MINOR"
-        
-        - name: Build and push multi-arch image (release)
-          if: startsWith(github.ref, 'refs/tags/')
+
+        - name: Create builder
+          id: buildx
           run: |
             IMG="ghcr.io/${{ github.repository }}"
             IMG=${IMG@L}
             
             docker buildx create --use --name multiarch-builder
             docker buildx inspect --bootstrap
+            
+        
+        - name: Build and push multi-arch image (release)
+          if: startsWith(github.ref, 'refs/tags/')
+          run: |
+            IMG="ghcr.io/${{ github.repository }}"
+            IMG=${IMG@L}
 
             docker buildx build \
               --platform linux/amd64,linux/arm64 \
+              --builder ${{ steps.buildx.outputs.name }} \
               --tag $IMG:${{ env.version }} \
               --tag $IMG:${{ env.version_major }}.${{ env.version_minor }}.latest \
               --tag $IMG:${{ env.version_major }}.latest \
