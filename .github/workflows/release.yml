@@ -1,12 +1,29 @@
 name: Release
 on: 
     push:
-        tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+        tags: 'v*.*'
+        branches:
+          - main
+    pull_request:
+        branches:
+          - main
 jobs:
     build:
       runs-on: ubuntu-24.04
       steps:
         - uses: actions/checkout@v4
+          with:
+            fetch-depth: 0  # Required to get all tags for versioning
+
+        - name: Set up Python
+          uses: actions/setup-python@v4
+          with:
+            python-version: '3.10'
+
+        - name: Install lib-version
+          run: |
+            python -m pip install --upgrade pip
+            pip install git+https://github.com/remla25-team2/lib-version@v0.2.2
 
         - uses: docker/setup-qemu-action@v3
         - uses: docker/setup-buildx-action@v2
@@ -17,19 +34,20 @@ jobs:
             username: remla25-team2-bot
             password: ${{ secrets.GHBOT_TOKEN }}
             
-        - name: Parse version info from tag
+        # For tagged releases
+        - name: Get release version with lib-version
+          if: startsWith(github.ref, 'refs/tags/')
+          id: get_version
           run: |
-            # GITHUB_REF is like refs/tags/v2.3.5, so strip the first 11 chars
-            VERSION=${GITHUB_REF:11}
+            VERSION=$(lib-version version current)
             MAJOR=$(echo "$VERSION" | cut -d . -f 1)
             MINOR=$(echo "$VERSION" | cut -d . -f 2)
-            PATCH=$(echo "$VERSION" | cut -d . -f 3)
             echo "version=$VERSION" >> $GITHUB_ENV
             echo "version_major=$MAJOR" >> $GITHUB_ENV
             echo "version_minor=$MINOR" >> $GITHUB_ENV
-            echo "version_patch=$PATCH" >> $GITHUB_ENV
         
-        - name: Build and push multi-arch image
+        - name: Build and push multi-arch image (release)
+          if: startsWith(github.ref, 'refs/tags/')
           run: |
             IMG="ghcr.io/${{ github.repository }}"
             IMG=${IMG@L}
@@ -43,5 +61,30 @@ jobs:
               --tag $IMG:${{ env.version_major }}.${{ env.version_minor }}.latest \
               --tag $IMG:${{ env.version_major }}.latest \
               --tag $IMG:latest \
+              --push \
+              .
+              
+        # For main branch (pre-release)
+        - name: Get pre-release version with lib-version
+          if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+          id: pre_version
+          run: |
+            NEXT_VERSION=$(lib-version version next)
+            PRE_VERSION="${NEXT_VERSION}-pre"
+            echo "pre_version=$PRE_VERSION" >> $GITHUB_ENV
+            
+        - name: Build and push multi-arch image (pre-release)
+          if: github.ref == 'refs/heads/main'
+          run: |
+            IMG="ghcr.io/${{ github.repository }}"
+            IMG=${IMG@L}
+            
+            docker buildx create --use --name multiarch-builder
+            docker buildx inspect --bootstrap
+
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              --tag $IMG:${{ env.pre_version }} \
+              --tag $IMG:pre-release \
               --push \
               .
