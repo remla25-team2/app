@@ -1,6 +1,8 @@
 # Use Python image
 FROM python:3.10-slim
 
+LABEL org.opencontainers.image.source https://github.com/remla25-team2/app
+
 RUN apt update && apt upgrade -y && apt install -y git
 
 # Copy files
