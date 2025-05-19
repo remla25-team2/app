@@ -1,8 +1,9 @@
-from flask import Flask, Response, render_template, jsonify, request
+from flask import Flask, Response, render_template, jsonify, request, g
 from lib_version.version_util import VersionUtil
 import requests
 import os
-from prometheus_client import Counter, Gauge, generate_latest
+import time
+from prometheus_client import Counter, Gauge, generate_latest, Histogram
 
 app = Flask(__name__)
 MODEL_URL = os.environ.get('MODEL_SERVICE_URL', 'http://model-service:5001')
@@ -16,19 +17,27 @@ in_flight = Gauge(
     'in_flight_requests',
     'Number of in-flight requests'
 )
+request_latency = Histogram(
+    'http_request_duration_seconds',
+    'Duration of HTTP requests in seconds',
+    ['method', 'endpoint', 'status']
+)
 
 @app.before_request
 def before_request():
     in_flight.inc()
+    g.start_time = time.time()
 
 @app.after_request
 def after_request(response):
+    duration = time.time() - g.start_time
     # label by method, path, status code
     http_reqs.labels(
         method=request.method,
         endpoint=request.path,
         status=response.status_code
     ).inc()
+    request_latency.labels(method=request.method, endpoint=request.path, status=response.status_code).observe(duration)
     in_flight.dec()
     return response
 
