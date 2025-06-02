@@ -47,3 +47,5 @@ htmlcov/
 # macOS and Linux system files
 .DS_Store
 *.swp
+
+version.json

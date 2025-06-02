@@ -3,7 +3,10 @@ from lib_version.version_util import VersionUtil
 import requests
 import os
 import time
+import uuid
+from datetime import datetime
 from prometheus_client import Counter, Gauge, generate_latest, Histogram
+
 
 app = Flask(__name__)
 MODEL_URL = os.environ.get('MODEL_SERVICE_URL', 'http://model-service:5001')
@@ -22,6 +25,25 @@ request_latency = Histogram(
     'Duration of HTTP requests in seconds',
     ['method', 'endpoint', 'status']
 )
+
+prediction_feedback = Counter(
+    'prediction_feedback_total',
+    'Total feedback received on predictions',
+    ['original_prediction', 'user_feedback']
+)
+prediction_confidence = Histogram(
+    'prediction_confidence_distribution',
+    'Distribution of prediction confidence scores',
+    ['prediction']
+)
+user_corrections = Counter(
+    'user_corrections_total',
+    'Total user corrections by prediction type',
+    ['original_prediction', 'corrected_prediction']
+)
+
+# in-memory store for predictions and scores
+predictions_store = {}
 
 @app.before_request
 def before_request():
@@ -46,7 +68,6 @@ def metrics():
     return Response(generate_latest(), mimetype='text/plain')
 
 
-
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -55,9 +76,94 @@ def index():
 @app.route('/sentiment', methods=['POST'])
 def sentiment():
     text = request.form['text']
+    
+    # Generate unique prediction ID
+    prediction_id = str(uuid.uuid4())
+    
+    # Get prediction from model service
     resp = requests.get(f"{MODEL_URL}/predict", params={'text': text})
     data = resp.json()
-    return jsonify(sentiment=data['sentiment'])
+    
+    sentiment_value = data['sentiment']
+    confidence = data.get('confidence', 0.5)  # Assuming model returns confidence
+    
+    # Store prediction for later feedback
+    predictions_store[prediction_id] = {
+        'text': text,
+        'prediction': sentiment_value,
+        'confidence': confidence,
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    # Record metrics
+    prediction_confidence.labels(
+        prediction='positive' if sentiment_value == 1 else 'negative'
+    ).observe(confidence)
+    
+    return jsonify(
+        sentiment=sentiment_value,
+        confidence=confidence,
+        prediction_id=prediction_id
+    )
+
+@app.route('/feedback', methods=['POST'])
+def feedback():
+    """Handle user feedback on predictions"""
+    prediction_id = request.form.get('prediction_id')
+    user_feedback = request.form.get('feedback')  # 'correct', 'incorrect', 'positive', 'negative'
+    user_correction = request.form.get('correction')  # Optional: what it should be
+    
+    if not prediction_id or prediction_id not in predictions_store:
+        return jsonify(error='Invalid prediction ID'), 400
+    
+    prediction = predictions_store[prediction_id]
+    original_prediction = 'positive' if prediction['prediction'] == 1 else 'negative'
+    
+    # Record feedback metrics
+    if user_feedback in ['correct', 'incorrect']:
+        prediction_feedback.labels(
+            original_prediction=original_prediction,
+            user_feedback=user_feedback
+        ).inc()
+    
+    # Record corrections
+    if user_correction and user_correction != original_prediction:
+        user_corrections.labels(
+            original_prediction=original_prediction,
+            corrected_prediction=user_correction
+        ).inc()
+        
+        # Store correction for potential model retraining
+        prediction['user_correction'] = user_correction
+        prediction['feedback_timestamp'] = datetime.now().isoformat()
+    
+    return jsonify(success=True, message='Feedback recorded')
+
+@app.route('/flag', methods=['POST'])
+def flag_prediction():
+    """Allow users to flag problematic predictions"""
+    prediction_id = request.form.get('prediction_id')
+    flag_reason = request.form.get('reason')  # 'inappropriate', 'wrong_context', 'other'
+    
+    if not prediction_id or prediction_id not in predictions_store:
+        return jsonify(error='Invalid prediction ID'), 400
+    
+    prediction = predictions_store[prediction_id]
+    prediction['flagged'] = True
+    prediction['flag_reason'] = flag_reason
+    prediction['flag_timestamp'] = datetime.now().isoformat()
+    
+    # Record flagged prediction metric
+    flagged_predictions = Counter(
+        'flagged_predictions_total',
+        'Total flagged predictions',
+        ['reason']
+    )
+    flagged_predictions.labels(
+        reason=flag_reason
+    ).inc()
+    
+    return jsonify(success=True, message='Prediction flagged')
 
 @app.route('/version')
 def version():
