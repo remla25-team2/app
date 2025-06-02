@@ -36,8 +36,8 @@ jobs:
         - uses: docker/login-action@v3
           with:
             registry: ghcr.io
-            username: remla25-team2-bot
-            password: ${{ secrets.GHBOT_TOKEN }}
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
             
         # For tagged releases
         - name: Get release version with lib-version
