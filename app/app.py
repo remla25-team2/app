@@ -9,21 +9,17 @@ from prometheus_client import Counter, Gauge, generate_latest, Histogram
 
 
 app = Flask(__name__)
+app_version = os.environ.get('VERSION', 'v1')
 MODEL_URL = os.environ.get('MODEL_SERVICE_URL', 'http://model-service:5001')
 
 http_reqs = Counter(
     'http_requests_total',
     'Total HTTP requests',
-    ['method','endpoint','status']
+    ['method', 'endpoint', 'status', 'version']
 )
 in_flight = Gauge(
     'in_flight_requests',
     'Number of in-flight requests'
-)
-request_latency = Histogram(
-    'http_request_duration_seconds',
-    'Duration of HTTP requests in seconds',
-    ['method', 'endpoint', 'status']
 )
 
 prediction_feedback = Counter(
@@ -42,6 +38,17 @@ user_corrections = Counter(
     ['original_prediction', 'corrected_prediction']
 )
 
+active_users = Gauge(
+    'active_users',
+    'Number of active users currently using the app'
+)
+
+request_latency = Histogram(
+    'http_request_duration_seconds',
+    'Duration of HTTP requests in seconds',
+    ['method', 'endpoint', 'status', 'version']
+)
+
 # in-memory store for predictions and scores
 predictions_store = {}
 
@@ -53,13 +60,19 @@ def before_request():
 @app.after_request
 def after_request(response):
     duration = time.time() - g.start_time
-    # label by method, path, status code
+    # label by method, path, status code, and version
     http_reqs.labels(
         method=request.method,
         endpoint=request.path,
-        status=response.status_code
+        status=response.status_code,
+        version=app_version
     ).inc()
-    request_latency.labels(method=request.method, endpoint=request.path, status=response.status_code).observe(duration)
+    request_latency.labels(
+        method=request.method, 
+        endpoint=request.path, 
+        status=response.status_code,
+        version=app_version
+    ).observe(duration)
     in_flight.dec()
     return response
 
