@@ -52,9 +52,26 @@ window.addEventListener('DOMContentLoaded', () => {
         const emoji = sentiment === 1 ? '😊 Positive' : '☹️ Negative';
         const confidencePercent = (confidence * 100).toFixed(1);
         
+        // Determine confidence level and styling
+        let confidenceClass = '';
+        let confidenceWarning = '';
+        
+        if (confidence >= 0.8) {
+          confidenceClass = 'confidence-high';
+          confidenceWarning = 'High confidence prediction';
+        } else if (confidence >= 0.6) {
+          confidenceClass = 'confidence-medium';
+          confidenceWarning = 'Medium confidence - consider the context';
+        } else {
+          confidenceClass = 'confidence-low';
+          confidenceWarning = 'Low confidence - use with caution';
+        }
+        
+        resultEl.className = confidenceClass;
         resultEl.innerHTML = `
           <strong>${emoji}</strong>
           <br><small>Confidence: ${confidencePercent}%</small>
+          <div class="confidence-warning">${confidenceWarning}</div>
         `;
         
         // Show feedback section
