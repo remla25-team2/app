@@ -28,7 +28,7 @@ jobs:
         - name: Install lib-version
           run: |
             python -m pip install --upgrade pip
-            pip install git+https://github.com/remla25-team2/lib-version@v0.2.2
+            pip install -r requirements.txt
 
         - name: Set build metadata with lib-version
           id: build_meta
