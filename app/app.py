@@ -25,17 +25,17 @@ in_flight = Gauge(
 prediction_feedback = Counter(
     'prediction_feedback_total',
     'Total feedback received on predictions',
-    ['original_prediction', 'user_feedback']
+    ['original_prediction', 'user_feedback', 'version']
 )
 prediction_confidence = Histogram(
     'prediction_confidence_distribution',
     'Distribution of prediction confidence scores',
-    ['prediction']
+    ['prediction', 'version']
 )
 user_corrections = Counter(
     'user_corrections_total',
     'Total user corrections by prediction type',
-    ['original_prediction', 'corrected_prediction']
+    ['original_prediction', 'corrected_prediction', 'version']
 )
 
 active_users = Gauge(
@@ -110,7 +110,8 @@ def sentiment():
     
     # Record metrics
     prediction_confidence.labels(
-        prediction='positive' if sentiment_value == 1 else 'negative'
+        prediction='positive' if sentiment_value == 1 else 'negative',
+        version=app_version
     ).observe(confidence)
     
     return jsonify(
@@ -136,14 +137,16 @@ def feedback():
     if user_feedback in ['correct', 'incorrect']:
         prediction_feedback.labels(
             original_prediction=original_prediction,
-            user_feedback=user_feedback
+            user_feedback=user_feedback,
+            version=app_version
         ).inc()
     
     # Record corrections
     if user_correction and user_correction != original_prediction:
         user_corrections.labels(
             original_prediction=original_prediction,
-            corrected_prediction=user_correction
+            corrected_prediction=user_correction,
+            version=app_version
         ).inc()
         
         # Store correction for potential model retraining
@@ -166,14 +169,15 @@ def flag_prediction():
     prediction['flag_reason'] = flag_reason
     prediction['flag_timestamp'] = datetime.now().isoformat()
     
-    # Record flagged prediction metric
+    # Record flagged prediction metric with version
     flagged_predictions = Counter(
         'flagged_predictions_total',
         'Total flagged predictions',
-        ['reason']
+        ['reason', 'version']
     )
     flagged_predictions.labels(
-        reason=flag_reason
+        reason=flag_reason,
+        version=app_version
     ).inc()
     
     return jsonify(success=True, message='Prediction flagged')
