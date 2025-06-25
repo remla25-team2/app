@@ -38,6 +38,18 @@ user_corrections = Counter(
     ['original_prediction', 'corrected_prediction', 'version']
 )
 
+model_service_errors = Counter(
+    'model_service_errors_total',
+    'Total errors from model service',
+    ['error_type', 'version']
+)
+
+model_service_warnings = Counter(
+    'model_service_warnings_total', 
+    'Total warnings from model service',
+    ['warning_type', 'version']
+)
+
 active_users = Gauge(
     'active_users',
     'Number of active users currently using the app'
@@ -93,32 +105,95 @@ def sentiment():
     # Generate unique prediction ID
     prediction_id = str(uuid.uuid4())
     
-    # Get prediction from model service
-    resp = requests.get(f"{MODEL_URL}/predict", params={'text': text})
-    data = resp.json()
-    
-    sentiment_value = data['sentiment']
-    confidence = data.get('confidence', 0.5)  # Assuming model returns confidence
-    
-    # Store prediction for later feedback
-    predictions_store[prediction_id] = {
-        'text': text,
-        'prediction': sentiment_value,
-        'confidence': confidence,
-        'timestamp': datetime.now().isoformat()
-    }
-    
-    # Record metrics
-    prediction_confidence.labels(
-        prediction='positive' if sentiment_value == 1 else 'negative',
-        version=app_version
-    ).observe(confidence)
-    
-    return jsonify(
-        sentiment=sentiment_value,
-        confidence=confidence,
-        prediction_id=prediction_id
-    )
+    try:
+        # Get prediction from model service
+        resp = requests.get(f"{MODEL_URL}/predict", params={'text': text})
+        
+        # Handle model service errors
+        if resp.status_code != 200:
+            model_service_errors.labels(
+                error_type='http_error',
+                version=app_version
+            ).inc()
+            return jsonify(
+                error='Model service error',
+                message='Failed to get prediction from model service'
+            ), 500
+        
+        data = resp.json()
+        
+        # Check if model service returned an error
+        if 'error' in data:
+            model_service_errors.labels(
+                error_type='prediction_error',
+                version=app_version
+            ).inc()
+            return jsonify(
+                error='Model prediction failed',
+                message=data['error']
+            ), 500
+        
+        sentiment_value = data['sentiment']
+        confidence = data.get('confidence', 0.5)
+        warning = data.get('warning')
+        debug_info = data.get('debug_info', {})
+        
+        # Record warning metrics if present
+        if warning:
+            model_service_warnings.labels(
+                warning_type='vocabulary_mismatch' if 'vocabulary' in warning else 'other',
+                version=app_version
+            ).inc()
+        
+        # Store prediction for later feedback
+        predictions_store[prediction_id] = {
+            'text': text,
+            'prediction': sentiment_value,
+            'confidence': confidence,
+            'timestamp': datetime.now().isoformat(),
+            'warning': warning,
+            'debug_info': debug_info
+        }
+        
+        # Record metrics
+        prediction_confidence.labels(
+            prediction='positive' if sentiment_value == 1 else 'negative',
+            version=app_version
+        ).observe(confidence)
+        
+        response_data = {
+            'sentiment': sentiment_value,
+            'confidence': confidence,
+            'prediction_id': prediction_id
+        }
+        
+        # Include warning if present
+        if warning:
+            response_data['warning'] = warning
+        
+        if debug_info:
+            response_data['debug_info'] = debug_info
+        
+        return jsonify(response_data)
+        
+    except requests.exceptions.RequestException as e:
+        model_service_errors.labels(
+            error_type='connection_error',
+            version=app_version
+        ).inc()
+        return jsonify(
+            error='Model service unavailable',
+            message=f'Failed to connect to model service: {str(e)}'
+        ), 503
+    except Exception as e:
+        model_service_errors.labels(
+            error_type='unexpected_error',
+            version=app_version
+        ).inc()
+        return jsonify(
+            error='Internal server error',
+            message=f'Unexpected error: {str(e)}'
+        ), 500
 
 @app.route('/feedback', methods=['POST'])
 def feedback():
