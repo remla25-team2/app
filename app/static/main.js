@@ -1,29 +1,16 @@
 window.addEventListener("DOMContentLoaded", () => {
   let currentPredictionId = null;
-  let currentAppVersion = null; // To store the app version read from the DOM
-
   // Load versions
   fetch("/version")
     .then((res) => res.json())
     .then((data) => {
       document.getElementById("app_version").textContent = data.app_version;
-      currentAppVersion = data.app_version; // Store the app version (e.g., "v1-color", "v2-nocolor")
     })
     .catch((err) => {
       console.error("Error loading app version:", err);
       document.getElementById("app_version").textContent = "Error";
     });
 
-  fetch("/version/modelversion")
-    .then((res) => res.json())
-    .then((data) => {
-      document.getElementById("model_version").textContent =
-        data.model_service_version;
-    })
-    .catch((err) => {
-      console.error("Error loading model version:", err);
-      document.getElementById("model_version").textContent = "Error";
-    });
 
   // Handle form submission
   const form = document.getElementById("sentimentForm");
@@ -58,22 +45,18 @@ window.addEventListener("DOMContentLoaded", () => {
 
       const emoji = sentiment === 1 ? "😊 Positive" : "☹️ Negative";
 
-      // Apply sentiment-based styling conditionally based on the received app version
-      if (currentAppVersion === "v1-color") {
-        // This version applies color
-        if (sentiment === 1) {
-          resultEl.classList.add("sentiment-positive");
-        } else {
-          resultEl.classList.add("sentiment-negative");
-        }
-      }
-      // If currentAppVersion is 'v2-nocolor', no specific sentiment class is added,
-      // so it will use the default styling for #sentimentResult (transparent border, no background color).
-
       resultEl.innerHTML = `<strong>${emoji}</strong>`; // Display only emoji and sentiment text
+
+      // Add color coding based on sentiment
+      if (sentiment === 1) {
+        resultEl.className = "sentiment-positive";
+      } else {
+        resultEl.className = "sentiment-negative";
+      }
 
       // Show feedback section
       feedbackEl.style.display = "block";
+
     } catch (err) {
       console.error("Error fetching sentiment:", err);
       resultEl.textContent = "Error analyzing sentiment.";
