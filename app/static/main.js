@@ -1,169 +1,169 @@
-window.addEventListener('DOMContentLoaded', () => {
-    let currentPredictionId = null;
+window.addEventListener("DOMContentLoaded", () => {
+  let currentPredictionId = null;
+  let currentAppVersion = null; // To store the app version read from the DOM
 
-    // Load versions
-    fetch('/version')
-      .then(res => res.json())
-      .then(data => {
-        document.getElementById('app_version').textContent = data.app_version;
-      })
-      .catch(err => {
-        console.error('Error loading app version:', err);
-        document.getElementById('app_version').textContent = 'Error';
+  // Load versions
+  fetch("/version")
+    .then((res) => res.json())
+    .then((data) => {
+      document.getElementById("app_version").textContent = data.app_version;
+      currentAppVersion = data.app_version; // Store the app version (e.g., "v1-color", "v2-nocolor")
+    })
+    .catch((err) => {
+      console.error("Error loading app version:", err);
+      document.getElementById("app_version").textContent = "Error";
+    });
+
+  fetch("/version/modelversion")
+    .then((res) => res.json())
+    .then((data) => {
+      document.getElementById("model_version").textContent =
+        data.model_service_version;
+    })
+    .catch((err) => {
+      console.error("Error loading model version:", err);
+      document.getElementById("model_version").textContent = "Error";
+    });
+
+  // Handle form submission
+  const form = document.getElementById("sentimentForm");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = document.getElementById("text").value.trim();
+
+    const resultEl = document.getElementById("sentimentResult");
+    const feedbackEl = document.getElementById("feedbackSection");
+
+    // Clear previous styles and content on new submission
+    resultEl.className = ""; // Remove any previously applied sentiment classes
+    resultEl.innerHTML = "";
+
+    if (!text) {
+      resultEl.textContent = "Please enter a comment.";
+      return;
+    }
+
+    const body = new URLSearchParams({ text }).toString();
+
+    try {
+      const res = await fetch("/sentiment", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
       });
+      const data = await res.json();
+      const { sentiment, prediction_id } = data; // 'confidence' and related data are no longer used here
 
-    fetch('/version/modelversion')
-      .then(res => res.json())
-      .then(data => {
-        document.getElementById('model_version').textContent = data.model_service_version;
-      })
-      .catch(err => {
-        console.error('Error loading model version:', err);
-        document.getElementById('model_version').textContent = 'Error';
-      });
+      currentPredictionId = prediction_id;
 
-    // Handle form submission
-    const form = document.getElementById('sentimentForm');
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const text = document.getElementById('text').value.trim();
+      const emoji = sentiment === 1 ? "😊 Positive" : "☹️ Negative";
 
-      const resultEl = document.getElementById('sentimentResult');
-      const feedbackEl = document.getElementById('feedbackSection');
-      
-      if (!text) {
-        resultEl.textContent = 'Please enter a comment.';
-        return;
-      }
-
-      const body = new URLSearchParams({ text }).toString();
-
-      try {
-        const res = await fetch('/sentiment', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-          body
-        });
-        const data = await res.json();
-        const { sentiment, confidence, prediction_id } = data;
-        
-        currentPredictionId = prediction_id;
-        
-        const emoji = sentiment === 1 ? '😊 Positive' : '☹️ Negative';
-        const confidencePercent = (confidence * 100).toFixed(1);
-        
-        // Determine confidence level and styling
-        let confidenceClass = '';
-        let confidenceWarning = '';
-        
-        if (confidence >= 0.8) {
-          confidenceClass = 'confidence-high';
-          confidenceWarning = 'High confidence prediction';
-        } else if (confidence >= 0.6) {
-          confidenceClass = 'confidence-medium';
-          confidenceWarning = 'Medium confidence - consider the context';
+      // Apply sentiment-based styling conditionally based on the received app version
+      if (currentAppVersion === "v1-color") {
+        // This version applies color
+        if (sentiment === 1) {
+          resultEl.classList.add("sentiment-positive");
         } else {
-          confidenceClass = 'confidence-low';
-          confidenceWarning = 'Low confidence - use with caution';
+          resultEl.classList.add("sentiment-negative");
         }
-        
-        resultEl.className = confidenceClass;
-        resultEl.innerHTML = `
-          <strong>${emoji}</strong>
-          <br><small>Confidence: ${confidencePercent}%</small>
-          <div class="confidence-warning">${confidenceWarning}</div>
-        `;
-        
-        // Show feedback section
-        feedbackEl.style.display = 'block';
-        
-      } catch (err) {
-        console.error('Error fetching sentiment:', err);
-        resultEl.textContent = 'Error analyzing sentiment.';
       }
-    });
+      // If currentAppVersion is 'v2-nocolor', no specific sentiment class is added,
+      // so it will use the default styling for #sentimentResult (transparent border, no background color).
 
-    // Handle feedback buttons
-    document.addEventListener('click', async (e) => {
-      if (!currentPredictionId) return;
-      
-      if (e.target.classList.contains('feedback-btn')) {
-        const feedback = e.target.dataset.feedback;
-        await submitFeedback(feedback);
-      } else if (e.target.classList.contains('correction-btn')) {
-        const correction = e.target.dataset.correction;
-        await submitCorrection(correction);
-      } else if (e.target.id === 'flagBtn') {
-        await flagPrediction();
-      }
-    });
+      resultEl.innerHTML = `<strong>${emoji}</strong>`; // Display only emoji and sentiment text
 
-    async function submitFeedback(feedback) {
-      try {
-        const body = new URLSearchParams({
-          prediction_id: currentPredictionId,
-          feedback: feedback
-        }).toString();
-        
-        await fetch('/feedback', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-          body
-        });
-        
-        showFeedbackMessage('Thank you for your feedback!');
-      } catch (err) {
-        console.error('Error submitting feedback:', err);
-      }
+      // Show feedback section
+      feedbackEl.style.display = "block";
+    } catch (err) {
+      console.error("Error fetching sentiment:", err);
+      resultEl.textContent = "Error analyzing sentiment.";
     }
+  });
 
-    async function submitCorrection(correction) {
-      try {
-        const body = new URLSearchParams({
-          prediction_id: currentPredictionId,
-          feedback: 'incorrect',
-          correction: correction
-        }).toString();
-        
-        await fetch('/feedback', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-          body
-        });
-        
-        showFeedbackMessage('Correction recorded. Thank you!');
-      } catch (err) {
-        console.error('Error submitting correction:', err);
-      }
-    }
+  // Handle feedback buttons (no changes needed here, as they are independent of display style)
+  document.addEventListener("click", async (e) => {
+    if (!currentPredictionId) return;
 
-    async function flagPrediction() {
-      const reason = prompt('Why are you flagging this prediction?\n(inappropriate/wrong_context/other)') || 'other';
-      
-      try {
-        const body = new URLSearchParams({
-          prediction_id: currentPredictionId,
-          reason: reason
-        }).toString();
-        
-        await fetch('/flag', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-          body
-        });
-        
-        showFeedbackMessage('Prediction flagged. Thank you!');
-      } catch (err) {
-        console.error('Error flagging prediction:', err);
-      }
+    if (e.target.classList.contains("feedback-btn")) {
+      const feedback = e.target.dataset.feedback;
+      await submitFeedback(feedback);
+    } else if (e.target.classList.contains("correction-btn")) {
+      const correction = e.target.dataset.correction;
+      await submitCorrection(correction);
+    } else if (e.target.id === "flagBtn") {
+      await flagPrediction();
     }
+  });
 
-    function showFeedbackMessage(message) {
-      const messageEl = document.getElementById('feedbackMessage');
-      messageEl.textContent = message;
-      messageEl.style.display = 'block';
-      setTimeout(() => {
-        messageEl.style.display = 'none';
-      }, 3000);
+  async function submitFeedback(feedback) {
+    try {
+      const body = new URLSearchParams({
+        prediction_id: currentPredictionId,
+        feedback: feedback,
+      }).toString();
+
+      await fetch("/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+
+      showFeedbackMessage("Thank you for your feedback!");
+    } catch (err) {
+      console.error("Error submitting feedback:", err);
     }
+  }
+
+  async function submitCorrection(correction) {
+    try {
+      const body = new URLSearchParams({
+        prediction_id: currentPredictionId,
+        feedback: "incorrect",
+        correction: correction,
+      }).toString();
+
+      await fetch("/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+
+      showFeedbackMessage("Correction recorded. Thank you!");
+    } catch (err) {
+      console.error("Error submitting correction:", err);
+    }
+  }
+
+  async function flagPrediction() {
+    const reason =
+      prompt(
+        "Why are you flagging this prediction?\n(inappropriate/wrong_context/other)",
+      ) || "other";
+
+    try {
+      const body = new URLSearchParams({
+        prediction_id: currentPredictionId,
+        reason: reason,
+      }).toString();
+
+      await fetch("/flag", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+
+      showFeedbackMessage("Prediction flagged. Thank you!");
+    } catch (err) {
+      console.error("Error flagging prediction:", err);
+    }
+  }
+
+  function showFeedbackMessage(message) {
+    const messageEl = document.getElementById("feedbackMessage");
+    messageEl.textContent = message;
+    messageEl.style.display = "block";
+    setTimeout(() => {
+      messageEl.style.display = "none";
+    }, 3000);
+  }
 });
